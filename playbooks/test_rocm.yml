@@ -1,11 +1,17 @@
 ---
-- name: Check ROC-SMI and Node Exporter Status
+- name: Test ROCm-SMI functionality
   hosts: localhost
-  connection: local
   gather_facts: yes
   
   tasks:
-    - name: Check if ROC-SMI is installed
-      command: which roc-smi
-      register: roc_smi_check
+    - name: Check if rocm-smi exists
+      command: which rocm-smi
+      register: rocm_smi_check
       ignore_errors: yes
+      changed_when: false
+
+    - name: Display ROCm-SMI version
+      command: rocm-smi --version
+      register: rocm_version
+      when: rocm_smi_check.rc == 0
+      changed_when: false
