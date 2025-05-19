@@ -1,0 +1,66 @@
+---
+- name: Check Node Exporter Status
+  hosts: localhost
+  gather_facts: yes
+
+  tasks:
+    - name: Check if node_exporter binary exists
+      command: which node_exporter
+      register: node_exporter_binary
+      ignore_errors: yes
+      changed_when: false
+      check_mode: no  # Allow this check even in check mode
+
+    - name: Get Node Exporter version if installed
+      command: node_exporter --version
+      register: node_exporter_version
+      when: node_exporter_binary.rc == 0
+      changed_when: false
+      ignore_errors: yes
+      check_mode: no
+
+    - name: Check Node Exporter service status with systemd
+      command: systemctl status node_exporter
+      register: systemd_status
+      when: ansible_service_mgr == 'systemd'
+      ignore_errors: yes
+      changed_when: false
+      check_mode: no
+
+    - name: Check Node Exporter process
+      command: pgrep -f node_exporter
+      register: process_check
+      ignore_errors: yes
+      changed_when: false
+      check_mode: no
+
+    - name: Check if Node Exporter port is listening
+      command: lsof -i :9100
+      register: port_check
+      ignore_errors: yes
+      changed_when: false
+      check_mode: no
+
+    - name: Display Node Exporter Status Summary
+      debug:
+        msg: |
+          Node Exporter Status Summary:
+          - Binary installed: {{ node_exporter_binary.rc == 0 }}
+          {% if node_exporter_binary.rc == 0 %}
+          - Version info: {{ node_exporter_version.stdout_lines[0] | default('N/A') }}
+          {% endif %}
+          - Process running: {{ process_check.rc == 0 }}
+          - Port 9100 listening: {{ port_check.rc == 0 }}
+          {% if ansible_service_mgr == 'systemd' %}
+          - Systemd service status: {{ 'Active' if systemd_status.rc == 0 else 'Inactive or Failed' }}
+          {% endif %}
+
+    - name: Check mode notification
+      debug:
+        msg: "Running in check mode - all checks are read-only operations"
+      when: ansible_check_mode
+
+    - name: Fail if Node Exporter is not installed
+      fail:
+        msg: "Node Exporter is not installed on the system (binary not found)"
+      when: node_exporter_binary.rc != 0
