@@ -1,0 +1,11 @@
+---
+- name: Check ROC-SMI and Node Exporter Status
+  hosts: localhost
+  connection: local
+  gather_facts: yes
+  
+  tasks:
+    - name: Check if ROC-SMI is installed
+      command: which roc-smi
+      register: roc_smi_check
+      ignore_errors: yes
