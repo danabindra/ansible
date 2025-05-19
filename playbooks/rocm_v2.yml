@@ -1,0 +1,148 @@
+---
+- name: Export ROCm-SMI Checks to Prometheus Metrics
+  hosts: localhost
+  gather_facts: yes
+  vars:
+    metrics_dir: /var/lib/prometheus/node-exporter/textfile_collector
+    metrics_file: "{{ metrics_dir }}/rocm_checks.prom"
+    timestamp: "{{ ansible_date_time.epoch }}"
+
+  tasks:
+    - name: Ensure metrics directory exists
+      file:
+        path: "{{ metrics_dir }}"
+        state: directory
+        mode: '0755'
+        owner: prometheus
+        group: prometheus
+      become: yes
+      check_mode: no
+
+    - name: Check if rocm-smi exists
+      command: which rocm-smi
+      register: rocm_smi_check
+      ignore_errors: yes
+      changed_when: false
+      check_mode: no
+
+    - name: Initialize default values
+      set_fact:
+        rocm_smi_installed: "{{ '1' if rocm_smi_check.rc | default(2) == 0 else '0' }}"
+        gpu_available: '0'
+        temperature_celsius: '0'
+        fan_speed_percent: '0'
+        version_info: 'N/A'
+
+    - name: Get ROCm-SMI version
+      command: rocm-smi --version
+      register: rocm_version
+      when: rocm_smi_check.rc is defined and rocm_smi_check.rc == 0
+      ignore_errors: yes
+      changed_when: false
+      check_mode: no
+
+    - name: Update version info if available
+      set_fact:
+        version_info: "{{ rocm_version.stdout_lines[0] | default('N/A') }}"
+      when: rocm_version.stdout_lines is defined and rocm_version.stdout_lines | length > 0
+
+    - name: Get GPU information
+      command: rocm-smi
+      register: gpu_info
+      when: rocm_smi_check.rc is defined and rocm_smi_check.rc == 0
+      ignore_errors: yes
+      changed_when: false
+      check_mode: no
+
+    - name: Update GPU availability if check successful
+      set_fact:
+        gpu_available: "{{ '1' if gpu_info.rc | default(2) == 0 else '0' }}"
+      when: gpu_info is defined
+
+    - name: Get detailed GPU status
+      command: rocm-smi --showproductname --showfan --showtemp --showclocks
+      register: gpu_status
+      when: rocm_smi_check.rc is defined and rocm_smi_check.rc == 0
+      ignore_errors: yes
+      changed_when: false
+      check_mode: no
+
+    - name: Debug GPU status output
+      debug:
+        var: gpu_status.stdout_lines
+      when: gpu_status is defined
+
+    - name: Process GPU metrics if available
+      set_fact:
+        temperature_celsius: "{{ (item.split(':')[1] | regex_replace('[^0-9.]', '')) if ':' in item else '0' }}"
+      when: 
+        - gpu_status is defined 
+        - gpu_status.stdout_lines is defined
+        - gpu_status.stdout_lines | length > 0
+        - "'Temperature' in item"
+      loop: "{{ gpu_status.stdout_lines | default([]) }}"
+
+    - name: Process fan metrics if available
+      set_fact:
+        fan_speed_percent: "{{ (item.split(':')[1] | regex_replace('[^0-9.]', '')) if ':' in item else '0' }}"
+      when: 
+        - gpu_status is defined 
+        - gpu_status.stdout_lines is defined
+        - gpu_status.stdout_lines | length > 0
+        - "'Fan Speed' in item"
+      loop: "{{ gpu_status.stdout_lines | default([]) }}"
+
+    - name: Debug final metric values
+      debug:
+        msg: |
+          Temperature: {{ temperature_celsius }}
+          Fan Speed: {{ fan_speed_percent }}
+
+    - name: Prepare metrics content
+      set_fact:
+        metrics_content: |
+          # HELP rocm_smi_installed Whether rocm-smi is installed (1=yes, 0=no)
+          # TYPE rocm_smi_installed gauge
+          rocm_smi_installed {{ rocm_smi_installed }}
+          
+          # HELP rocm_smi_check_timestamp Unix timestamp of the last check
+          # TYPE rocm_smi_check_timestamp gauge
+          rocm_smi_check_timestamp {{ timestamp }}
+          
+          # HELP rocm_smi_gpu_available Whether GPU is detected by rocm-smi (1=yes, 0=no)
+          # TYPE rocm_smi_gpu_available gauge
+          rocm_smi_gpu_available {{ gpu_available }}
+          
+          # HELP rocm_smi_temperature_celsius GPU temperature in Celsius
+          # TYPE rocm_smi_temperature_celsius gauge
+          rocm_smi_temperature_celsius {{ temperature_celsius | default('0') }}
+          
+          # HELP rocm_smi_fan_speed_percent GPU fan speed percentage
+          # TYPE rocm_smi_fan_speed_percent gauge
+          rocm_smi_fan_speed_percent {{ fan_speed_percent | default('0') }}
+
+    - name: Write metrics to file
+      copy:
+        content: "{{ metrics_content }}"
+        dest: "{{ metrics_file }}"
+        mode: '0644'
+        owner: prometheus
+        group: prometheus
+      become: yes
+      check_mode: no
+
+    - name: Display ROCm-SMI Status and Metrics Location
+      debug:
+        msg: |
+          ROCm-SMI Status Summary:
+          - Binary installed: {{ rocm_smi_installed == '1' }}
+          - Version info: {{ version_info }}
+          - GPU Available: {{ gpu_available == '1' }}
+          - Temperature: {{ temperature_celsius }}°C
+          - Fan Speed: {{ fan_speed_percent }}%
+          
+          {% if ansible_check_mode %}
+          Running in CHECK MODE - no actual changes were made
+          {% else %}
+          Metrics have been written to: {{ metrics_file }}
+          {% endif %}
