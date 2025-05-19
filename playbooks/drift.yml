@@ -1,0 +1,44 @@
+---
+- name: Check ROC-SMI and Node Exporter Status
+  hosts: localhost
+  connection: local
+  gather_facts: yes
+  
+  tasks:
+    - name: Check if ROC-SMI is installed
+      command: which roc-smi
+      register: roc_smi_check
+      ignore_errors: yes
+
+    - name: Get ROC-SMI version
+      command: roc-smi --version
+      register: roc_smi_version
+      ignore_errors: yes
+      when: roc_smi_check.rc == 0
+
+    - name: Check ROC-SMI service status
+      command: pgrep -f roc-smi
+      register: roc_smi_status
+      ignore_errors: yes
+
+    - name: Check if Node Exporter is installed
+      command: which node_exporter
+      register: node_exporter_check
+      ignore_errors: yes
+
+    - name: Check Node Exporter service status
+      command: pgrep -f node_exporter
+      register: node_exporter_status
+      ignore_errors: yes
+
+    - name: Display Results
+      debug:
+        msg: |
+          ROC-SMI Status:
+          - Installed: {{ 'Yes' if roc_smi_check.rc == 0 else 'No' }}
+          - Version: {{ roc_smi_version.stdout if roc_smi_version.stdout is defined else 'Not available' }}
+          - Running: {{ 'Yes' if roc_smi_status.rc == 0 else 'No' }}
+          
+          Node Exporter Status:
+          - Installed: {{ 'Yes' if node_exporter_check.rc == 0 else 'No' }}
+          - Running: {{ 'Yes' if node_exporter_status.rc == 0 else 'No' }}
