@@ -83,11 +83,24 @@
           },
           "expr": "rocm_smi_version_info",
           "legendFormat": "{{instance}} - {{version}}",
-          "refId": "A"
+          "refId": "A",
+          "instant": true
         }
       ],
       "title": "ROCm Version Status",
-      "type": "stat"
+      "type": "stat",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Version"
+            }
+          }
+        }
+      ]
     },
     {
       "datasource": {
