@@ -1,0 +1,103 @@
+---
+- name: Check Node Exporter and Export Metrics
+  hosts: localhost
+  gather_facts: yes
+  vars:
+    metrics_dir: /var/lib/node_exporter/textfile_collector
+    metrics_file: "{{ metrics_dir }}/ansible_checks.prom"
+    timestamp: "{{ ansible_date_time.epoch }}"
+
+  tasks:
+    - name: Ensure metrics directory exists
+      file:
+        path: "{{ metrics_dir }}"
+        state: directory
+        mode: '0755'
+      become: yes
+      check_mode: no
+
+    - name: Check if node_exporter binary exists
+      command: which node_exporter
+      register: node_exporter_binary
+      ignore_errors: yes
+      changed_when: false
+      check_mode: no
+
+    - name: Get Node Exporter version if installed
+      command: node_exporter --version
+      register: node_exporter_version
+      when: node_exporter_binary.rc == 0
+      changed_when: false
+      ignore_errors: yes
+      check_mode: no
+
+    - name: Check Node Exporter service status with systemd
+      command: systemctl status node_exporter
+      register: systemd_status
+      when: ansible_service_mgr == 'systemd'
+      ignore_errors: yes
+      changed_when: false
+      check_mode: no
+
+    - name: Check Node Exporter process
+      command: pgrep -f node_exporter
+      register: process_check
+      ignore_errors: yes
+      changed_when: false
+      check_mode: no
+
+    - name: Check if Node Exporter port is listening
+      command: lsof -i :9100
+      register: port_check
+      ignore_errors: yes
+      changed_when: false
+      check_mode: no
+
+    - name: Prepare metrics content
+      set_fact:
+        metrics_content: |
+          # HELP node_exporter_binary_installed Whether the Node Exporter binary is installed (1=yes, 0=no)
+          # TYPE node_exporter_binary_installed gauge
+          node_exporter_binary_installed {{ '1' if node_exporter_binary.rc == 0 else '0' }}
+          
+          # HELP node_exporter_process_running Whether the Node Exporter process is running (1=yes, 0=no)
+          # TYPE node_exporter_process_running gauge
+          node_exporter_process_running {{ '1' if process_check.rc == 0 else '0' }}
+          
+          # HELP node_exporter_port_listening Whether Node Exporter port 9100 is listening (1=yes, 0=no)
+          # TYPE node_exporter_port_listening gauge
+          node_exporter_port_listening {{ '1' if port_check.rc == 0 else '0' }}
+          
+          {% if ansible_service_mgr == 'systemd' %}
+          # HELP node_exporter_service_active Whether the Node Exporter systemd service is active (1=yes, 0=no)
+          # TYPE node_exporter_service_active gauge
+          node_exporter_service_active {{ '1' if systemd_status.rc == 0 else '0' }}
+          {% endif %}
+          
+          # HELP node_exporter_last_check_timestamp Unix timestamp of the last check
+          # TYPE node_exporter_last_check_timestamp gauge
+          node_exporter_last_check_timestamp {{ timestamp }}
+
+    - name: Write metrics to file
+      copy:
+        content: "{{ metrics_content }}"
+        dest: "{{ metrics_file }}"
+        mode: '0644'
+      become: yes
+      check_mode: no
+
+    - name: Display Node Exporter Status Summary
+      debug:
+        msg: |
+          Node Exporter Status Summary:
+          - Binary installed: {{ node_exporter_binary.rc == 0 }}
+          {% if node_exporter_binary.rc == 0 %}
+          - Version info: {{ node_exporter_version.stdout_lines[0] | default('N/A') }}
+          {% endif %}
+          - Process running: {{ process_check.rc == 0 }}
+          - Port 9100 listening: {{ port_check.rc == 0 }}
+          {% if ansible_service_mgr == 'systemd' %}
+          - Systemd service status: {{ 'Active' if systemd_status.rc == 0 else 'Inactive or Failed' }}
+          {% endif %}
+          
+          Metrics have been written to: {{ metrics_file }} 
