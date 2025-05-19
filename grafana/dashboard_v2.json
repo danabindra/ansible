@@ -19,28 +19,14 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "ROCM-SMI_version__3.0.0_94441cb",
-                "result": {
-                  "color": "green",
-                  "text": "Version Match"
-                }
-              },
-              "type": "value"
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
             },
-            {
-              "options": {
-                "match": ".*",
-                "result": {
-                  "color": "red",
-                  "text": "Version Mismatch"
-                }
-              },
-              "type": "value"
-            }
-          ],
+            "inspect": false
+          },
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -51,28 +37,39 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "version"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 0
       },
       "id": 1,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
           "fields": "",
-          "values": false
+          "reducer": [
+            "sum"
+          ],
+          "show": false
         },
-        "textMode": "auto"
+        "showHeader": true
       },
       "pluginVersion": "10.0.0",
       "targets": [
@@ -82,21 +79,54 @@
             "uid": "prometheus"
           },
           "expr": "rocm_smi_version_info",
-          "legendFormat": "{{instance}} - {{version}}",
-          "refId": "A",
-          "instant": true
+          "instant": true,
+          "legendFormat": "{{instance}}",
+          "refId": "A"
         }
       ],
       "title": "ROCm Version Status",
-      "type": "stat",
+      "type": "table",
       "transformations": [
         {
           "id": "organize",
           "options": {
-            "excludeByName": {},
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "Value": true
+            },
             "indexByName": {},
             "renameByName": {
-              "Value": "Version"
+              "instance": "Node",
+              "version": "ROCm Version"
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Status",
+            "expression": "if(${ROCm Version} == 'ROCM-SMI_version__3.0.0_94441cb', 'Version Match', 'Version Mismatch')",
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "ROCm Version"
+              ],
+              "reducer": "lastNotNull"
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Status Color",
+            "expression": "if(${ROCm Version} == 'ROCM-SMI_version__3.0.0_94441cb', 'green', 'red')",
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "ROCm Version"
+              ],
+              "reducer": "lastNotNull"
             }
           }
         }
