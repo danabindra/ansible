@@ -99,9 +99,4 @@
           - GPU Available: {{ gpu_info.rc == 0 }}
           {% endif %}
           
-          Metrics have been written to: {{ metrics_file }}
-          
-          Next steps:
-          1. Ensure Node Exporter is configured to read from {{ metrics_dir }}
-          2. Verify metrics are visible at http://localhost:9100/metrics
-          3. Configure Prometheus server at 10.10.1.1 to scrape these metrics
+
