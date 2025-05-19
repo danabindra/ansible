@@ -9,9 +9,49 @@
       register: rocm_smi_check
       ignore_errors: yes
       changed_when: false
+      check_mode: no
 
     - name: Display ROCm-SMI version
       command: rocm-smi --version
       register: rocm_version
       when: rocm_smi_check.rc == 0
       changed_when: false
+      check_mode: no
+
+    - name: Get GPU information
+      command: rocm-smi
+      register: gpu_info
+      when: rocm_smi_check.rc == 0
+      changed_when: false
+      check_mode: no
+
+    - name: Display GPU information
+      debug:
+        var: gpu_info.stdout_lines
+      when: 
+        - rocm_smi_check.rc == 0
+        - not ansible_check_mode or gpu_info is defined
+
+    - name: Get detailed GPU status
+      command: rocm-smi --showproductname --showfan --showtemp --showclocks
+      register: gpu_status
+      when: rocm_smi_check.rc == 0
+      changed_when: false
+      check_mode: no
+
+    - name: Display detailed GPU status
+      debug:
+        var: gpu_status.stdout_lines
+      when: 
+        - rocm_smi_check.rc == 0
+        - not ansible_check_mode or gpu_status is defined
+
+    - name: Check mode status message
+      debug:
+        msg: "Running in check mode - some command outputs will be simulated"
+      when: ansible_check_mode
+
+    - name: Fail if rocm-smi is not installed
+      fail:
+        msg: "rocm-smi is not installed on the system"
+      when: rocm_smi_check.rc != 0 
